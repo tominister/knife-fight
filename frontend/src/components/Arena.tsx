@@ -101,10 +101,10 @@ export default function GameCanvas() {
         playersRef.current = { ...playersRef.current, [newPlayer.id]: newPlayer };
       });
 
-      socket.on('playerLeft', (id) => {
-        console.log('Player left:', id);
+      socket.on('playerLeft', (playerId) => {
+        console.log('Player left:', playerId);
         const newPlayers = { ...playersRef.current };
-        delete newPlayers[id];
+        delete newPlayers[playerId];
         playersRef.current = newPlayers;
       });
 
@@ -118,7 +118,7 @@ export default function GameCanvas() {
 
       socket.on('knivesUpdate', (knivesData: [string, Knife][]) => {
         // Update knives from server with shooterId
-        knivesRef.current = knivesData.map(([id, knife]) => ({
+        knivesRef.current = knivesData.map(([, knife]) => ({
           x: knife.x,
           y: knife.y,
           dx: knife.dx,
@@ -150,7 +150,7 @@ export default function GameCanvas() {
         socket = null;
       }
     };
-  }, []); // Empty dependency array - only run once
+  }, [myId]); // Added myId as a dependency since it's used in the playerMoved handler
 
   // Cleanup function for reload timeout
   const cleanupReload = () => {
