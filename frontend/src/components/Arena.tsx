@@ -202,7 +202,63 @@ export default function GameCanvas() {
     };
   }, []);
 
-  // Separate effect for click handling
+  // Socket event handlers effect
+  useEffect(() => {
+    if (!socket || !isConnected || !myId) return;
+
+    const currentSocket = socket;
+    console.log('Setting up socket event handlers for player:', myId);
+
+    // Handle knife hits
+    const handleKnifeHit = (data: { knifeId: string, hitPlayerId: string, shooterId: string }) => {
+      console.log('Received knife hit event:', data);
+      // Remove the knife that hit
+      knivesRef.current = knivesRef.current.filter(k => k.id !== data.knifeId);
+    };
+
+    // Handle points updates
+    const handlePointsUpdate = (data: { playerId: string, points: number }) => {
+      console.log('Received points update:', data);
+      if (data.playerId === myId) {
+        pointsRef.current = data.points;
+      }
+    };
+
+    // Handle player movement updates - using rest parameters instead of arguments
+    const handlePlayerMoved = ({ id, x, y }: { id: string, x: number, y: number }) => {
+      if (id === myId) return; // Don't update our own position from server
+      if (playersRef.current[id]) {
+        playersRef.current = { ...playersRef.current, [id]: { x, y } };
+      }
+    };
+
+    // Handle knife updates from server
+    const handleKnivesUpdate = (knivesData: [string, Knife][]) => {
+      knivesRef.current = knivesData.map(([, knife]) => ({
+        x: knife.x,
+        y: knife.y,
+        dx: knife.dx,
+        dy: knife.dy,
+        id: knife.id,
+        shooterId: knife.shooterId
+      }));
+    };
+
+    currentSocket.on('knifeHit', handleKnifeHit);
+    currentSocket.on('pointsUpdate', handlePointsUpdate);
+    currentSocket.on('playerMoved', handlePlayerMoved);
+    currentSocket.on('knivesUpdate', handleKnivesUpdate);
+
+    return () => {
+      console.log('Cleaning up socket event handlers');
+      currentSocket.off('knifeHit', handleKnifeHit);
+      currentSocket.off('pointsUpdate', handlePointsUpdate);
+      currentSocket.off('playerMoved', handlePlayerMoved);
+      currentSocket.off('knivesUpdate', handleKnivesUpdate);
+    };
+  }, [isConnected, myId]);
+
+  // Separate effect for click handling - add startReload to dependencies
   useEffect(() => {
     if (!isConnected || !myId) return;
 
@@ -254,7 +310,7 @@ export default function GameCanvas() {
     return () => {
       canvas.removeEventListener('mousedown', handleClick);
     };
-  }, [isConnected, myId, isReloading, canFire, reloadText]);
+  }, [isConnected, myId, isReloading, canFire, reloadText, startReload]);
 
   // Separate effect for drawing the reload box
   useEffect(() => {
@@ -297,172 +353,7 @@ export default function GameCanvas() {
     return () => {
       cancelAnimationFrame(reloadBoxLoop);
     };
-  }, [isConnected, myId, isReloading, canFire, reloadText, startReload]);
-
-  // Socket event handlers effect
-  useEffect(() => {
-    if (!socket || !isConnected || !myId) return;
-
-    const currentSocket = socket;
-    console.log('Setting up socket event handlers for player:', myId);
-
-    // Handle knife hits
-    const handleKnifeHit = (data: { knifeId: string, hitPlayerId: string, shooterId: string }) => {
-      console.log('Received knife hit event:', data);
-      // Remove the knife that hit
-      knivesRef.current = knivesRef.current.filter(k => k.id !== data.knifeId);
-    };
-
-    // Handle points updates
-    const handlePointsUpdate = (data: { playerId: string, points: number }) => {
-      console.log('Received points update:', data);
-      if (data.playerId === myId) {
-        pointsRef.current = data.points;
-      }
-    };
-
-    // Handle player movement updates
-    const handlePlayerMoved = ({ x, y }: { id: string, x: number, y: number }) => {
-      const { id } = arguments[0]; // Get id from arguments to use it
-      if (playersRef.current[id]) {
-        playersRef.current = { ...playersRef.current, [id]: { x, y } };
-      }
-    };
-
-    // Handle knife updates from server
-    const handleKnivesUpdate = (knivesData: [string, Knife][]) => {
-      knivesRef.current = knivesData.map(([, knife]) => ({
-        x: knife.x,
-        y: knife.y,
-        dx: knife.dx,
-        dy: knife.dy,
-        id: knife.id,
-        shooterId: knife.shooterId
-      }));
-    };
-
-    currentSocket.on('knifeHit', handleKnifeHit);
-    currentSocket.on('pointsUpdate', handlePointsUpdate);
-    currentSocket.on('playerMoved', handlePlayerMoved);
-    currentSocket.on('knivesUpdate', handleKnivesUpdate);
-
-    return () => {
-      console.log('Cleaning up socket event handlers');
-      currentSocket.off('knifeHit', handleKnifeHit);
-      currentSocket.off('pointsUpdate', handlePointsUpdate);
-      currentSocket.off('playerMoved', handlePlayerMoved);
-      currentSocket.off('knivesUpdate', handleKnivesUpdate);
-    };
-  }, [isConnected, myId]);
-
-  // Separate effect for movement handling
-  useEffect(() => {
-    if (!isConnected || !myId) {
-      console.log('Waiting for connection...', { isConnected, myId });
-      return;
-    }
-
-    const canvas = canvasRef.current;
-    if (!canvas) {
-      console.error('Canvas not available');
-      return;
-    }
-
-    const keys = { w: false, a: false, s: false, d: false };
-    const currentSocket = socket;
-    if (!currentSocket) {
-      console.error('Socket not available');
-      return;
-    }
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'w' || e.key === 'W') keys.w = true;
-      if (e.key === 's' || e.key === 'S') keys.s = true;
-      if (e.key === 'a' || e.key === 'A') keys.a = true;
-      if (e.key === 'd' || e.key === 'D') keys.d = true;
-    };
-
-    const handleKeyUp = (e: KeyboardEvent) => {
-      if (e.key === 'w' || e.key === 'W') keys.w = false;
-      if (e.key === 's' || e.key === 'S') keys.s = false;
-      if (e.key === 'a' || e.key === 'A') keys.a = false;
-      if (e.key === 'd' || e.key === 'D') keys.d = false;
-    };
-
-    const handleMouseMove = (e: MouseEvent) => {
-      const rect = canvas.getBoundingClientRect();
-      mouseRef.current.x = e.clientX - rect.left;
-      mouseRef.current.y = e.clientY - rect.top;
-    };
-
-    const movePlayer = () => {
-      // Don't move if player hasn't spawned
-      if (!playerRef.current) return;
-
-      const speed = 3;
-      let moved = false;
-      const arenaCenter = { x: 400, y: 300 };
-      const arenaRadius = 250;
-      const playerRadius = playerRef.current.radius;
-      const centerLineY = 300; // Y-coordinate of the center line
-
-      let newX = playerRef.current.x;
-      let newY = playerRef.current.y;
-
-      if (keys.w) newY -= speed;
-      if (keys.s) newY += speed;
-      if (keys.a) newX -= speed;
-      if (keys.d) newX += speed;
-
-      // Check arena boundary
-      const distToCenter = Math.hypot(newX - arenaCenter.x, newY - arenaCenter.y);
-      if (distToCenter + playerRadius > arenaRadius) {
-        return;
-      }
-
-      // Check center line boundary
-      // If player is in top half, prevent moving below center line
-      if (playerRef.current.y < centerLineY && newY + playerRadius > centerLineY) {
-        newY = centerLineY - playerRadius;
-      }
-      // If player is in bottom half, prevent moving above center line
-      else if (playerRef.current.y > centerLineY && newY - playerRadius < centerLineY) {
-        newY = centerLineY + playerRadius;
-      }
-
-      // Update position if we have a valid move
-      if (newX !== playerRef.current.x || newY !== playerRef.current.y) {
-        playerRef.current.x = newX;
-        playerRef.current.y = newY;
-        moved = true;
-      }
-
-      // Send movement update if moved and enough time has passed
-      if (moved) {
-        const now = Date.now();
-        if (now - lastMoveTimeRef.current >= MOVE_UPDATE_INTERVAL) {
-          currentSocket.emit('move', { x: playerRef.current.x, y: playerRef.current.y });
-          lastMoveTimeRef.current = now;
-        }
-      }
-    };
-
-    // Movement update loop
-    const movementLoop = setInterval(movePlayer, 1000 / 60);
-
-    // Add event listeners
-    window.addEventListener('keydown', handleKeyDown);
-    window.addEventListener('keyup', handleKeyUp);
-    canvas.addEventListener('mousemove', handleMouseMove);
-
-    // Cleanup
-    return () => {
-      clearInterval(movementLoop);
-      window.removeEventListener('keydown', handleKeyDown);
-      window.removeEventListener('keyup', handleKeyUp);
-      canvas.removeEventListener('mousemove', handleMouseMove);
-    };
-  }, [isConnected, myId]);
+  }, [isConnected, myId, isReloading, canFire, reloadText]);
 
   // Game loop effect (drawing only)
   useEffect(() => {
@@ -563,8 +454,8 @@ export default function GameCanvas() {
         ctx.textAlign = 'left';
         
         let yOffset = scoresBoxY + 45;
-        Object.entries(gameEndScores).forEach(([, score]) => {
-          const playerName = id === myId ? 'You' : 'Other Player';
+        Object.entries(gameEndScores).forEach(([playerId, score]) => {
+          const playerName = playerId === myId ? 'You' : 'Other Player';
           const scoreText = `${playerName}: ${score} points`;
           ctx.fillText(scoreText, scoresBoxX + 20, yOffset);
           yOffset += 30;
@@ -633,13 +524,13 @@ export default function GameCanvas() {
       knivesRef.current.forEach(knife => {
         ctx.beginPath();
         ctx.arc(knife.x, knife.y, 5, 0, 2 * Math.PI);
-        ctx.fillStyle = 'black';
+        ctx.fillStyle = knife.shooterId === myId ? 'blue' : 'black';
         ctx.fill();
       });
 
       // Draw other players
-      Object.entries(playersRef.current).forEach(([id, p]) => {
-        if (id === myId) return;
+      Object.entries(playersRef.current).forEach(([playerId, p]) => {
+        if (playerId === myId) return;
         ctx.beginPath();
         ctx.arc(p.x, p.y, 20, 0, 2 * Math.PI);
         ctx.fillStyle = 'green';
@@ -665,13 +556,8 @@ export default function GameCanvas() {
       requestAnimationFrame(draw);
     };
 
-    // Start game loop
     const gameLoop = requestAnimationFrame(draw);
-
-    // Cleanup
-    return () => {
-      cancelAnimationFrame(gameLoop);
-    };
+    return () => cancelAnimationFrame(gameLoop);
   }, [isConnected, myId, gameTimer, gameEndScores, canFire, isReloading, reloadText]);
 
   // Debug logging
@@ -682,7 +568,7 @@ export default function GameCanvas() {
   // Add spawn slots update handler
   useEffect(() => {
     const currentSocket = socket;
-    if (!currentSocket) return;
+    if (!currentSocket || !myId) return;
 
     const handleSpawnSlotsUpdate = (slots: SpawnSlots) => {
       console.log('Received spawn slots update:', slots);
@@ -710,7 +596,7 @@ export default function GameCanvas() {
       currentSocket.off('spawnSlotsUpdate', handleSpawnSlotsUpdate);
       currentSocket.off('spawnRejected', handleSpawnRejected);
     };
-  }, [myId]); // Removed socket dependency
+  }, [myId]);
 
   // Handle spawn button clicks
   const handleSpawn = (position: 'top' | 'bottom') => {
@@ -750,39 +636,33 @@ export default function GameCanvas() {
     const currentSocket = socket;
     if (!currentSocket) return;
 
-    console.log('Setting up game state handlers');
-
     const handleGameTimerUpdate = (timeLeft: number) => {
       console.log('Game timer update received:', timeLeft);
       setGameTimer(timeLeft);
-      // Force a re-render by updating a dummy state
-      setReloadText(prev => prev);
     };
 
     const handleGameEnd = (data: { scores: { [id: string]: number } }) => {
       console.log('Game end received with scores:', data.scores);
       setGameEndScores(data.scores);
       setGameTimer(null);
-      // Force a re-render by updating a dummy state
-      setReloadText(prev => prev);
+      
       // Clear scores after a delay
-      setTimeout(() => {
+      const timeoutId = setTimeout(() => {
         console.log('Clearing game end scores');
         setGameEndScores(null);
-        // Force a re-render by updating a dummy state
-        setReloadText(prev => prev);
       }, 5000);
+
+      return () => clearTimeout(timeoutId);
     };
 
     currentSocket.on('gameTimerUpdate', handleGameTimerUpdate);
     currentSocket.on('gameEnd', handleGameEnd);
 
     return () => {
-      console.log('Cleaning up game state handlers');
       currentSocket.off('gameTimerUpdate', handleGameTimerUpdate);
       currentSocket.off('gameEnd', handleGameEnd);
     };
-  }, []); // Removed socket dependency
+  }, []);
 
   // Debug logging for game state
   useEffect(() => {
@@ -793,7 +673,7 @@ export default function GameCanvas() {
       isConnected,
       myId
     });
-  }, [gameTimer, gameEndScores, spawnSlots, isConnected, myId]); // Removed hasSpawned dependency
+  }, [gameTimer, gameEndScores, spawnSlots, isConnected, myId]);
 
   return (
     <div style={{ 
