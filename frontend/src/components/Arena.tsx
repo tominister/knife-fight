@@ -43,7 +43,6 @@ export default function GameCanvas() {
   const [canFire, setCanFire] = useState(true);
   const [reloadText, setReloadText] = useState("Fire");
   const [isReloading, setIsReloading] = useState(false);
-  const [hasSpawned, setHasSpawned] = useState(false);
   const reloadTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const lastMoveTimeRef = useRef<number>(0);
   const MOVE_UPDATE_INTERVAL = 50;
@@ -109,7 +108,7 @@ export default function GameCanvas() {
         playersRef.current = newPlayers;
       });
 
-      socket.on('playerMoved', ({ id, x, y }) => {
+      socket.on('playerMoved', ({ id, x, y }: { id: string, x: number, y: number }) => {
         if (!playersRef.current[id]) return;
         playersRef.current = { ...playersRef.current, [id]: { x, y } };
       });
@@ -298,7 +297,7 @@ export default function GameCanvas() {
     return () => {
       cancelAnimationFrame(reloadBoxLoop);
     };
-  }, [isConnected, myId, isReloading, canFire, reloadText]); // Only depend on reload states
+  }, [isConnected, myId, isReloading, canFire, reloadText, startReload]);
 
   // Socket event handlers effect
   useEffect(() => {
@@ -323,8 +322,7 @@ export default function GameCanvas() {
     };
 
     // Handle player movement updates
-    const handlePlayerMoved = ({ id, x, y }: { id: string, x: number, y: number }) => {
-      if (id === myId) return; // Don't update our own position from server
+    const handlePlayerMoved = ({ x, y }: { id: string, x: number, y: number }) => {
       if (playersRef.current[id]) {
         playersRef.current = { ...playersRef.current, [id]: { x, y } };
       }
@@ -332,7 +330,7 @@ export default function GameCanvas() {
 
     // Handle knife updates from server
     const handleKnivesUpdate = (knivesData: [string, Knife][]) => {
-      knivesRef.current = knivesData.map(([id, knife]) => ({
+      knivesRef.current = knivesData.map(([, knife]) => ({
         x: knife.x,
         y: knife.y,
         dx: knife.dx,
@@ -463,7 +461,7 @@ export default function GameCanvas() {
       window.removeEventListener('keyup', handleKeyUp);
       canvas.removeEventListener('mousemove', handleMouseMove);
     };
-  }, [isConnected, myId]); // Only depend on connection state
+  }, [isConnected, myId]);
 
   // Game loop effect (drawing only)
   useEffect(() => {
@@ -673,7 +671,7 @@ export default function GameCanvas() {
     return () => {
       cancelAnimationFrame(gameLoop);
     };
-  }, [isConnected, myId, gameTimer, gameEndScores]); // Keep game state dependencies for drawing
+  }, [isConnected, myId, gameTimer, gameEndScores, canFire, isReloading, reloadText]);
 
   // Debug logging
   console.log('Current players state:', playersRef.current);
