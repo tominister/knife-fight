@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { io, Socket } from 'socket.io-client';
 
 // Create socket instance outside component
@@ -158,7 +158,7 @@ export default function GameCanvas() {
   };
 
   // Start reload countdown
-  const startReload = () => {
+  const startReload = useCallback(() => {
     console.log('Starting reload sequence');
     
     // Clean up any existing timeout
@@ -193,7 +193,7 @@ export default function GameCanvas() {
         }, 500); // Reduced from 1000ms to 500ms
       }, 500); // Reduced from 1000ms to 500ms
     }, 500); // Reduced from 1000ms to 500ms
-  };
+  }, []); // Empty dependency array since it only uses refs and state setters
 
   // Cleanup on unmount
   useEffect(() => {
@@ -323,6 +323,7 @@ export default function GameCanvas() {
 
     // Handle player movement updates
     const handlePlayerMoved = ({ x, y }: { id: string, x: number, y: number }) => {
+      const { id } = arguments[0]; // Get id from arguments to use it
       if (playersRef.current[id]) {
         playersRef.current = { ...playersRef.current, [id]: { x, y } };
       }
@@ -562,7 +563,7 @@ export default function GameCanvas() {
         ctx.textAlign = 'left';
         
         let yOffset = scoresBoxY + 45;
-        Object.entries(gameEndScores).forEach(([id, score], index) => {
+        Object.entries(gameEndScores).forEach(([, score]) => {
           const playerName = id === myId ? 'You' : 'Other Player';
           const scoreText = `${playerName}: ${score} points`;
           ctx.fillText(scoreText, scoresBoxX + 20, yOffset);
@@ -709,7 +710,7 @@ export default function GameCanvas() {
       currentSocket.off('spawnSlotsUpdate', handleSpawnSlotsUpdate);
       currentSocket.off('spawnRejected', handleSpawnRejected);
     };
-  }, [socket, myId]);
+  }, [myId]); // Removed socket dependency
 
   // Handle spawn button clicks
   const handleSpawn = (position: 'top' | 'bottom') => {
@@ -781,7 +782,7 @@ export default function GameCanvas() {
       currentSocket.off('gameTimerUpdate', handleGameTimerUpdate);
       currentSocket.off('gameEnd', handleGameEnd);
     };
-  }, [socket]);
+  }, []); // Removed socket dependency
 
   // Debug logging for game state
   useEffect(() => {
@@ -790,10 +791,9 @@ export default function GameCanvas() {
       gameEndScores, 
       spawnSlots,
       isConnected,
-      myId,
-      hasSpawned
+      myId
     });
-  }, [gameTimer, gameEndScores, spawnSlots, isConnected, myId, hasSpawned]);
+  }, [gameTimer, gameEndScores, spawnSlots, isConnected, myId]); // Removed hasSpawned dependency
 
   return (
     <div style={{ 
