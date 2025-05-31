@@ -108,9 +108,12 @@ export default function GameCanvas() {
         playersRef.current = newPlayers;
       });
 
-      socket.on('playerMoved', ({ id, x, y }: { id: string, x: number, y: number }) => {
-        if (!playersRef.current[id]) return;
-        playersRef.current = { ...playersRef.current, [id]: { x, y } };
+      socket.on('playerMoved', (data: { id: string, x: number, y: number }) => {
+        const { id, x, y } = data;
+        if (id === myId) return; // Don't update our own position from server
+        if (playersRef.current[id]) {
+          playersRef.current = { ...playersRef.current, [id]: { x, y } };
+        }
       });
 
       socket.on('knivesUpdate', (knivesData: [string, Knife][]) => {
@@ -225,7 +228,8 @@ export default function GameCanvas() {
     };
 
     // Handle player movement updates
-    const handlePlayerMoved = ({ id, x, y }: { id: string, x: number, y: number }) => {
+    const handlePlayerMoved = (data: { id: string, x: number, y: number }) => {
+      const { id, x, y } = data;
       if (id === myId) return; // Don't update our own position from server
       if (playersRef.current[id]) {
         playersRef.current = { ...playersRef.current, [id]: { x, y } };
