@@ -224,7 +224,7 @@ export default function GameCanvas() {
       }
     };
 
-    // Handle player movement updates - using rest parameters instead of arguments
+    // Handle player movement updates
     const handlePlayerMoved = ({ id, x, y }: { id: string, x: number, y: number }) => {
       if (id === myId) return; // Don't update our own position from server
       if (playersRef.current[id]) {
@@ -255,6 +255,115 @@ export default function GameCanvas() {
       currentSocket.off('pointsUpdate', handlePointsUpdate);
       currentSocket.off('playerMoved', handlePlayerMoved);
       currentSocket.off('knivesUpdate', handleKnivesUpdate);
+    };
+  }, [isConnected, myId]);
+
+  // Separate effect for movement handling
+  useEffect(() => {
+    if (!isConnected || !myId) {
+      console.log('Waiting for connection...', { isConnected, myId });
+      return;
+    }
+
+    const canvas = canvasRef.current;
+    if (!canvas) {
+      console.error('Canvas not available');
+      return;
+    }
+
+    const keys = { w: false, a: false, s: false, d: false };
+    const currentSocket = socket;
+    if (!currentSocket) {
+      console.error('Socket not available');
+      return;
+    }
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'w' || e.key === 'W') keys.w = true;
+      if (e.key === 's' || e.key === 'S') keys.s = true;
+      if (e.key === 'a' || e.key === 'A') keys.a = true;
+      if (e.key === 'd' || e.key === 'D') keys.d = true;
+    };
+
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (e.key === 'w' || e.key === 'W') keys.w = false;
+      if (e.key === 's' || e.key === 'S') keys.s = false;
+      if (e.key === 'a' || e.key === 'A') keys.a = false;
+      if (e.key === 'd' || e.key === 'D') keys.d = false;
+    };
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const rect = canvas.getBoundingClientRect();
+      mouseRef.current.x = e.clientX - rect.left;
+      mouseRef.current.y = e.clientY - rect.top;
+    };
+
+    const movePlayer = () => {
+      // Don't move if player hasn't spawned
+      if (!playerRef.current) return;
+
+      const speed = 3;
+      let moved = false;
+      const arenaCenter = { x: 400, y: 300 };
+      const arenaRadius = 250;
+      const playerRadius = playerRef.current.radius;
+      const centerLineY = 300; // Y-coordinate of the center line
+
+      let newX = playerRef.current.x;
+      let newY = playerRef.current.y;
+
+      if (keys.w) newY -= speed;
+      if (keys.s) newY += speed;
+      if (keys.a) newX -= speed;
+      if (keys.d) newX += speed;
+
+      // Check arena boundary
+      const distToCenter = Math.hypot(newX - arenaCenter.x, newY - arenaCenter.y);
+      if (distToCenter + playerRadius > arenaRadius) {
+        return;
+      }
+
+      // Check center line boundary
+      // If player is in top half, prevent moving below center line
+      if (playerRef.current.y < centerLineY && newY + playerRadius > centerLineY) {
+        newY = centerLineY - playerRadius;
+      }
+      // If player is in bottom half, prevent moving above center line
+      else if (playerRef.current.y > centerLineY && newY - playerRadius < centerLineY) {
+        newY = centerLineY + playerRadius;
+      }
+
+      // Update position if we have a valid move
+      if (newX !== playerRef.current.x || newY !== playerRef.current.y) {
+        playerRef.current.x = newX;
+        playerRef.current.y = newY;
+        moved = true;
+      }
+
+      // Send movement update if moved and enough time has passed
+      if (moved) {
+        const now = Date.now();
+        if (now - lastMoveTimeRef.current >= MOVE_UPDATE_INTERVAL) {
+          currentSocket.emit('move', { x: playerRef.current.x, y: playerRef.current.y });
+          lastMoveTimeRef.current = now;
+        }
+      }
+    };
+
+    // Movement update loop
+    const movementLoop = setInterval(movePlayer, 1000 / 60);
+
+    // Add event listeners
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    canvas.addEventListener('mousemove', handleMouseMove);
+
+    // Cleanup
+    return () => {
+      clearInterval(movementLoop);
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+      canvas.removeEventListener('mousemove', handleMouseMove);
     };
   }, [isConnected, myId]);
 
